@@ -2,8 +2,9 @@ import pandas as pd
 from nltk.corpus import stopwords
 
 DATASET_PATH_MOVIES_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/movies.csv"
-DATASET_PATH_RATINGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/ratings.csv"
+#DATASET_PATH_RATINGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/ratings.csv"
 DATASET_PATH_TAGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/tags.csv"
+DATASET_PATH_RATINGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/ratings_temp.csv"
 
 TOKENS_ALPHANUMERIC = '[A-Za-z0-9]+(?=\\s+)'
 stop = set(stopwords.words('english'))
@@ -52,7 +53,7 @@ genres_per_movie = movies_preprocessor(movies_df)
 tags_per_movie = tags_preprocessor(tags_df)
 
 
-concatenated_df = pd.concat([genres_per_movie, ratings_per_movie, tags_per_movie], axis=1)
+concatenated_df = pd.concat([genres_per_movie, ratings_per_movie, tags_per_movie], axis=1).dropna()
 concatenated_df["tag"] = concatenated_df["tag"].fillna("Not-applicable")
 concatenated_df = concatenated_df.fillna(0)
 
