@@ -1,0 +1,121 @@
+import numpy as np
+import pandas as pd
+from scipy import spatial
+
+
+def cosine_similarity(vec1, vec2):
+    vec1 = [int(x) for x in vec1]
+    vec2 = [int(x) for x in vec2]
+
+    return (1 - spatial.distance.cosine(vec1, vec2))
+
+def read_user_input(user_id_list):
+    while True:
+        try:
+            collaborative_filtering_input = int(
+                input("Please enter 0 for User-based, 1 for Item-based or 2 for Combination of the previous two: "))
+            user_id_input = int(input("Give a User Id in order to present recommendations to that user: "))
+        except ValueError:
+            print('Please enter a valid number')
+
+        if (collaborative_filtering_input in range(0, 2)) and (user_id_input in user_id_list):
+            break
+        else:
+            print("Either the first choice is wrong or the user id does not exists, please try again")
+    return collaborative_filtering_input, user_id_input
+
+## TODO
+user_id_list = list()
+collaborative_filtering_input, user_id_input = read_user_input(user_id_list)
+
+
+if collaborative_filtering_input == 0:
+    user_indices = np.array(list(idx_to_userId.keys()))
+    user_movies = user_item[user, :].toarray()
+    N_final = []
+
+    for _, batch in batches.split(user_item, user_indices):
+        X_batch, indices_batch = user_item[batch], user_indices[batch]
+
+        # Compute user-user similarities
+        sim_users = 1 - cosine_similarity(user_movies, X_batch)
+
+        # Find and store indices of most similar users
+        closest_userIds = np.array(np.where(sim_users[0, :] >= min_similarity_users))
+        N = indices_batch[closest_userIds[0, :]]
+        N_final = np.concatenate((N_final, N), axis=0).astype(int)
+
+    N_unique = np.unique(N_final)
+
+    # Compute similarities between specified user and all similar users
+    Sxy = 1 - cosine_similarity(user_movies, user_item[N_unique, :])
+
+    # Compute predicted ratings for user
+    pred_ratings = (Sxy @ user_item[N_unique, :]) / (np.sum(Sxy, axis=1).reshape(-1, 1))
+    pred_top_n = np.vstack((-np.sort(-pred_ratings, axis=1)[0, :top_n_movies],
+                            np.argsort(-pred_ratings, axis=1)[0, :top_n_movies]))
+
+    # Create a DataFrame which displays top-n movie recommendations
+    df = pd.DataFrame({'predicted_rating': pred_top_n[0, :], 'index': pred_top_n[1, :]})
+    df['movieId'] = df['index'].apply(lambda x: idx_to_movieId.get(x))
+    df['title'] = df['movieId'].apply(lambda x: titles_dict.get(x))
+    df_user = df.drop(['index', 'movieId'], axis=1)
+
+else if collaborative_filtering_input == 1:
+    movie_indices = np.array(list(idx_to_movieId.keys()))
+    user_movies = item_user[:, user].toarray()
+
+    # Store indices of movies ra00ed by user
+    rated = np.array(np.where(user_movies[:, 0] > 0))
+    N_final = []
+
+    for _, batch in batches.split(item_user, movie_indices):
+        X_batch, indices_batch = item_user[batch], movie_indices[batch]
+
+        # Index and keep only the movies rated by the user that are inside the batch
+        batch_dict = {o: i for i, o in enumerate(indices_batch)}
+        rated_in_batch = np.intersect1d(rated[0, :], indices_batch).astype(int)
+        rated_in_batch = np.array([batch_dict[x] for x in rated_in_batch])
+
+        if (rated_in_batch.size == 0):
+            continue
+
+        # Compute movie-movie similarities
+        sim_movies = 1 - cosine_similarity(X_batch[rated_in_batch, :], X_batch)
+
+        # Find and store indices of most similar movies to the ones rated by user
+        nearest_movies = np.array(np.where(sim_movies >= min_similarity_movies))
+        N = indices_batch[nearest_movies[1, :]]
+        N_final = np.concatenate((N_final, N), axis=0).astype(int)
+
+    N_unique = np.unique(N_final)
+
+    # Compute similarities between rated movies of user and all similar movies
+    Sij = 1 - cosine_similarity(item_user[rated[0, :], :],
+                                 item_user[N_unique, :])
+
+    # Compute predicted ratings for user
+    pred_ratings = (Sij.T @ user_movies[rated, 0].T) / (np.sum(Sij.T, axis=1).reshape(-1, 1))
+    pred_ratings_idx = np.vstack((pred_ratings[:, 0], N_unique)).T
+    pred_top_n = pred_ratings_idx[pred_ratings_idx[:, 0].argsort()][::-1][:top_n_movies, :]
+
+    # Create a DataFrame which displays top-n movie recommendations
+    df = pd.DataFrame({'predicted_rating': pred_top_n[:, 0], 'index': pred_top_n[:, 1]})
+    df['movieId'] = df['index'].apply(lambda x: idx_to_movieId.get(x))
+    df['title'] = df['movieId'].apply(lambda x: titles_dict.get(x))
+    df_item = df.drop(['index', 'movieId'], axis=1)
+
+
+
+print('\nDisk-based collaborative filtering using the {} variant finished '
+      'in {:.2f} s.\nThe data  were broken up into {} batches. \n'
+      'Below are the top-{} recommended movies and corresponding ratings for user {}.\n'
+      .format(task, dt, batches.get_n_splits(), top_n_movies, user_input))
+
+# Hybrid collaborative filtering
+if task == 'hybrid':
+    df = df_item.append(df_user)
+    df = df.sort_values(by='predicted_rating', ascending=False)[0:top_n_movies]
+    print(df)
+    # return df
+

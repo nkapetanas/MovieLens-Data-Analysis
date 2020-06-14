@@ -1,7 +1,13 @@
+from random import sample
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from scipy import spatial
+from scipy.spatial.distance import cosine, jaccard, cdist
+import seaborn as sns
+from sklearn.preprocessing import Normalizer
+from sklearn.decomposition import TruncatedSVD
 from sklearn.feature_extraction.text import TfidfVectorizer
 
 np.random.seed(42)
@@ -15,18 +21,17 @@ def read_csv_file(file_path):
 
 
 def create_bag_of_words(df, column):
-    tfidf_ngram = TfidfVectorizer(analyzer='char', ngram_range=(2, 3), max_features=5000)
+    tfidf_ngram = TfidfVectorizer(analyzer='char', ngram_range=(2, 3), max_features=2000)
     tfidf_ngram.fit(df[column])
     trainq1_trans = tfidf_ngram.transform(df[column]).toarray()
-    return np.concatenate((df["movieId"].values.reshape(-1,1), trainq1_trans), axis=1)
+    return np.concatenate((df["movieId"].values.reshape(-1, 1), trainq1_trans), axis=1)
 
 
-def jaccard_distance(list_a, list_b):
-    try:
-        return 1 - float(len(list_a.intersection(list_b))) / float(len(list_a.union(list_b)))
-    except TypeError:
-        print("Invalid type. Type set expected.")
+def jaccard_distance_genres(list_a, list_b):
+    return cdist(np.vstack(list_a), np.vstack(list_b), 'jaccard')
 
+def jaccard_distance_tags(list_a, list_b):
+    return cdist(np.vstack(list_a), np.vstack(list_b), 'jaccard')
 
 def cosine_similarity(vec1, vec2):
     vec1 = [int(x) for x in vec1]
@@ -34,6 +39,8 @@ def cosine_similarity(vec1, vec2):
 
     return (1 - spatial.distance.cosine(vec1, vec2))
 
+def custom_distance_function(vec1, vec2):
+    return 0.3*jaccard_distance_genres(vec1, vec2) + 0.25*jaccard_distance_tags(vec1, vec2) + 0.45*cosine_similarity(vec1, vec2)
 
 class KMeans:
 
@@ -70,7 +77,7 @@ class KMeans:
             self.centroids = self.get_centroids(self.clusters, movies)
 
             # check if clusters have changed
-            if self.converges(centroids_old, self.centroids):
+            if self.converges(centroids_old, self.centroids).all():
                 break
 
             if self.plot_steps:
@@ -88,31 +95,51 @@ class KMeans:
                 labels[sample_index] = cluster_idx
         return labels
 
+    def chunk(self, seq, num):
+        avg = len(seq) / float(num)
+        out = []
+        last = 0.0
+
+        while last < len(seq):
+            out.append(seq[int(last):int(last + avg)])
+            last += avg
+
+        return out
+
     def create_clusters(self, centroids, movies):
         # Assign the samples to the closest centroids to create clusters
-        clusters = [[] for _ in range(self.K)]
-        for idx, movie in enumerate(movies):
+        clusters = list()
+        for _ in range(self.K):
+            clusters.append(list())
+
+        for index, movie in enumerate(movies):
             centroid_index = self.get_closest_centroid(movie, centroids)
-            clusters[centroid_index].append(idx)
+            clusters[centroid_index].append(index)
         return clusters
 
     def get_closest_centroid(self, movies, centroids):
         # distance of the current sample to each centroid
-        distances = [self.distance_function(movies, point) for point in centroids]
+        distances = list()
+        for centroid in centroids:
+            distances.append(self.distance_function(movies, centroid))
+
         closest_index = np.argmin(distances)
         return closest_index
 
     def get_centroids(self, clusters, movies):
         # assign mean value of clusters to centroids
         centroids = np.zeros((self.K, self.features))
-        for cluster_idx, cluster in enumerate(clusters):
+        for cluster_index, cluster in enumerate(clusters):
             cluster_mean = np.mean(movies[cluster], axis=0)
-            centroids[cluster_idx] = cluster_mean
+            centroids[cluster_index] = cluster_mean
         return centroids
 
     def converges(self, centroids_old, centroids):
         # distances between each old and new centroids, fol all centroids
-        distances = [self.distance_function(centroids_old[i], centroids[i]) for i in range(self.K)]
+        distances = list()
+        for i in range(self.K):
+            distances.append(self.distance_function(centroids_old[i], centroids[i]))
+
         return sum(distances) == 0
 
     def plot(self, movies):
@@ -126,9 +153,6 @@ class KMeans:
             ax.scatter(*point, marker="x", color='black', linewidth=2)
 
         plt.show()
-
-
-preprocessed_df = read_csv_file(DATASET_PATH_PREPROCESSED_CSV)
 
 
 def get_movies_with_ratings(df):
@@ -147,11 +171,27 @@ def get_movies_with_tags(df):
     return df.iloc[:, [0, 13]]
 
 
-movies_with_ratings = get_movies_with_ratings(preprocessed_df)
-# tags_transform = create_bag_of_words(get_movies_with_tags(preprocessed_df), "tag")
-# genres_transform = create_bag_of_words(get_movies_with_genres(preprocessed_df), "genres")
+def countplot_clusters(movies_member, task):
+    X = movies_member[:, 1]
+    sns.countplot(X)
+    plt.xticks(np.arange(5), np.arange(5).astype(int))
+    plt.xlabel('Cluster')
+    plt.ylabel('Number of Movies')
+    plt.title('Countplot of Cluster Memberships using distance {}'.format(task))
+    # plt.savefig('countplot_{}.png'.format(task))
+    plt.show()
 
-k = KMeans(5, cosine_similarity)
-y_pred = k.predict(movies_with_ratings)
+predictions_list = list()
+for chunk in pd.read_csv(DATASET_PATH_PREPROCESSED_CSV, chunksize=1000):
 
-k.plot(movies_with_ratings)
+
+    movies_with_ratings = get_movies_with_ratings(chunk)
+    # tags_transform = create_bag_of_words(get_movies_with_tags(chunk), "tag")
+    # genres_transform = create_bag_of_words(get_movies_with_genres(chunk), "genres")
+
+    k = KMeans(5, cosine_similarity)
+    y_pred = k.predict(movies_with_ratings)
+    predictions_list.append(y_pred)
+
+flat_list = [item for sublist in predictions_list for item in sublist]
+countplot_clusters(flat_list, "Ratings")
