@@ -1,13 +1,71 @@
 import numpy as np
-import pandas as pd
 from scipy import spatial
+import pandas as pd
+from scipy.sparse import csr_matrix
 
+DATASET_PATH_MOVIES_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/movies.csv"
+DATASET_PATH_RATINGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/ratings_temp.csv"
 
 def cosine_similarity(vec1, vec2):
     vec1 = [int(x) for x in vec1]
     vec2 = [int(x) for x in vec2]
 
-    return (1 - spatial.distance.cosine(vec1, vec2))
+    return 1 - spatial.distance.cosine(vec1, vec2)
+
+def read_csv_file(file_path):
+    return pd.read_csv(file_path, encoding="utf-8")
+
+def delete_df_column(df, column):
+    del df[column]
+    return df
+
+def batch(iterable, n=1):
+    l = len(iterable)
+    for ndx in range(0, l, n):
+        yield iterable[ndx:min(ndx + n, l)]
+
+def preprocess_dataset():
+    movies_df = read_csv_file(DATASET_PATH_MOVIES_CSV)
+    ratings_df = read_csv_file(DATASET_PATH_RATINGS_CSV)
+
+    movies_df = delete_df_column(movies_df, "genres")
+    movie_id_title_dict = movies_df.set_index("movieId").T.to_dict("list")
+
+    ratings_df = delete_df_column(ratings_df, "timestamp")
+
+    uniq_user_ids = ratings_df["userId"].unique()
+    uniq_movie_ids = ratings_df["movieId"].unique()
+
+    userid_movies_with_ratings = ratings_df.groupby("userId").agg(
+        {"movieId": lambda x: list(x), "rating": lambda x: list(x)})
+
+    userId_indexes = userid_movies_with_ratings.axes[0]
+
+    userid_movies_with_ratings["userId"] = list(userid_movies_with_ratings.axes[0])
+
+    movies_rated_per_user = userid_movies_with_ratings[["userId", "movieId"]].copy()
+    ratings_given_by_user_per_movie = userid_movies_with_ratings[["userId", "rating"]].copy()
+
+    movies_rated_per_user_dict = movies_rated_per_user.set_index("userId").T.to_dict("list")
+    ratings_given_by_user_per_movie_dict = ratings_given_by_user_per_movie.set_index("userId").T.to_dict("list")
+
+    ratings_df.groupby("userId").agg({"movieId": lambda x: list(x), "rating": lambda x: list(x)})
+
+    userIds_moviesIds_ratings = csr_matrix((ratings_df["rating"].values,
+                                            (ratings_df["rating"], ratings_df["rating"])),
+                                           shape=(uniq_user_ids.shape[0], uniq_movie_ids[0]))
+
+    moviesIds_userIds_ratings = csr_matrix((ratings_df["rating"],
+                                            (ratings_df["rating"], ratings_df["rating"])),
+                                           shape=(uniq_movie_ids.shape[0], uniq_user_ids.shape[0]))
+
+    return movies_rated_per_user_dict,ratings_given_by_user_per_movie_dict,userId_indexes, uniq_user_ids,\
+           movie_id_title_dict, userIds_moviesIds_ratings, moviesIds_userIds_ratings
+
+
+
+movies_rated_per_user_dict,ratings_given_by_user_per_movie_dict,userId_indexes, uniq_user_ids,\
+           movie_id_title_dict, userIds_moviesIds_ratings, moviesIds_userIds_ratings = preprocess_dataset()
 
 def read_user_input(user_id_list):
     while True:
@@ -24,31 +82,31 @@ def read_user_input(user_id_list):
             print("Either the first choice is wrong or the user id does not exists, please try again")
     return collaborative_filtering_input, user_id_input
 
-## TODO
-user_id_list = list()
-collaborative_filtering_input, user_id_input = read_user_input(user_id_list)
+
+collaborative_filtering_input, user_id_input = read_user_input(uniq_user_ids)
 
 
 if collaborative_filtering_input == 0:
-    user_indices = np.array(list(idx_to_userId.keys()))
-    user_movies = user_item[user, :].toarray()
-    N_final = []
+
+    active_user_ratings = ratings_given_by_user_per_movie_dict[user_id_input]
+    active_user_rated_movies = movies_rated_per_user_dict[user_id_input]
+
 
     for _, batch in batches.split(user_item, user_indices):
         X_batch, indices_batch = user_item[batch], user_indices[batch]
 
         # Compute user-user similarities
-        sim_users = 1 - cosine_similarity(user_movies, X_batch)
+        sim_users = cosine_similarity(user_movies, X_batch)
 
         # Find and store indices of most similar users
         closest_userIds = np.array(np.where(sim_users[0, :] >= min_similarity_users))
         N = indices_batch[closest_userIds[0, :]]
         N_final = np.concatenate((N_final, N), axis=0).astype(int)
-
+    #krata indexes kai similarities
     N_unique = np.unique(N_final)
 
     # Compute similarities between specified user and all similar users
-    Sxy = 1 - cosine_similarity(user_movies, user_item[N_unique, :])
+    Sxy =  cosine_similarity(user_movies, user_item[N_unique, :])
 
     # Compute predicted ratings for user
     pred_ratings = (Sxy @ user_item[N_unique, :]) / (np.sum(Sxy, axis=1).reshape(-1, 1))
@@ -61,7 +119,10 @@ if collaborative_filtering_input == 0:
     df['title'] = df['movieId'].apply(lambda x: titles_dict.get(x))
     df_user = df.drop(['index', 'movieId'], axis=1)
 
-else if collaborative_filtering_input == 1:
+elif collaborative_filtering_input == 1:
+
+    # prepei na vroume tis tainies pou exei dosei rating o user -> rated
+    # movie-movie similarity pou exei kanei rate me oles tis ipolipes pou uparxoun sto batch
     movie_indices = np.array(list(idx_to_movieId.keys()))
     user_movies = item_user[:, user].toarray()
 
@@ -81,7 +142,7 @@ else if collaborative_filtering_input == 1:
             continue
 
         # Compute movie-movie similarities
-        sim_movies = 1 - cosine_similarity(X_batch[rated_in_batch, :], X_batch)
+        sim_movies = cosine_similarity(X_batch[rated_in_batch, :], X_batch)
 
         # Find and store indices of most similar movies to the ones rated by user
         nearest_movies = np.array(np.where(sim_movies >= min_similarity_movies))
@@ -91,7 +152,7 @@ else if collaborative_filtering_input == 1:
     N_unique = np.unique(N_final)
 
     # Compute similarities between rated movies of user and all similar movies
-    Sij = 1 - cosine_similarity(item_user[rated[0, :], :],
+    Sij = cosine_similarity(item_user[rated[0, :], :],
                                  item_user[N_unique, :])
 
     # Compute predicted ratings for user
