@@ -97,7 +97,7 @@ class KMeans:
 
     def chunk(self, seq, num):
         avg = len(seq) / float(num)
-        out = []
+        out = list()
         last = 0.0
 
         while last < len(seq):

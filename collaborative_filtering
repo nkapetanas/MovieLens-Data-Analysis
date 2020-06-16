@@ -1,28 +1,48 @@
 import numpy as np
 from scipy import spatial
 import pandas as pd
+from pandas.api.types import CategoricalDtype
 from scipy.sparse import csr_matrix
 
 DATASET_PATH_MOVIES_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/movies.csv"
 DATASET_PATH_RATINGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/ratings_temp.csv"
 
-def cosine_similarity(vec1, vec2):
-    vec1 = [int(x) for x in vec1]
-    vec2 = [int(x) for x in vec2]
 
-    return 1 - spatial.distance.cosine(vec1, vec2)
+def cosine_similarity(vec1, vec2, indexes):
+
+    similarity_indexes = dict()
+    for userId in indexes:
+        ratings_per_userid = vec2[userId, :].toarray()
+        similarity_indexes[userId] = 1 - spatial.distance.cosine(vec1, ratings_per_userid)
+
+    return similarity_indexes
+
 
 def read_csv_file(file_path):
     return pd.read_csv(file_path, encoding="utf-8")
+
 
 def delete_df_column(df, column):
     del df[column]
     return df
 
-def batch(iterable, n=1):
-    l = len(iterable)
-    for ndx in range(0, l, n):
-        yield iterable[ndx:min(ndx + n, l)]
+
+def chunks(list_to_chunk, n):
+    # looping till length l
+    for i in range(0, len(list_to_chunk), n):
+        yield list_to_chunk[i:i + n]
+
+def get_n_elements_dict(n, reversed_list, dict_to_sort):
+    dict_sort = dict()
+    if reversed_list:
+        for key in list(reversed(list(dict_to_sort)))[0:n]:
+            dict_sort[key] = dict_to_sort[key]
+        return dict_sort
+
+    for key in list(dict_to_sort)[0:n]:
+        dict_sort[key] = dict_to_sort[key]
+
+    return dict_sort
 
 def preprocess_dataset():
     movies_df = read_csv_file(DATASET_PATH_MOVIES_CSV)
@@ -33,8 +53,18 @@ def preprocess_dataset():
 
     ratings_df = delete_df_column(ratings_df, "timestamp")
 
-    uniq_user_ids = ratings_df["userId"].unique()
-    uniq_movie_ids = ratings_df["movieId"].unique()
+    users = list(ratings_df["userId"].unique())
+    movies = list(ratings_df["movieId"].unique())
+    ratings = list(ratings_df["rating"])
+    rows = ratings_df["userId"].astype(CategoricalDtype(categories=users)).cat.codes
+    cols = ratings_df["movieId"].astype(CategoricalDtype(categories=movies)).cat.codes
+
+    user_item = csr_matrix((ratings, (rows, cols)), shape=(len(users), len(movies)))
+
+    cols = ratings_df["userId"].astype(CategoricalDtype(categories=users)).cat.codes
+    rows = ratings_df["movieId"].astype(CategoricalDtype(categories=movies)).cat.codes
+
+    item_user = csr_matrix((ratings, (rows, cols)), shape=(len(movies), len(users)))
 
     userid_movies_with_ratings = ratings_df.groupby("userId").agg(
         {"movieId": lambda x: list(x), "rating": lambda x: list(x)})
@@ -51,21 +81,13 @@ def preprocess_dataset():
 
     ratings_df.groupby("userId").agg({"movieId": lambda x: list(x), "rating": lambda x: list(x)})
 
-    userIds_moviesIds_ratings = csr_matrix((ratings_df["rating"].values,
-                                            (ratings_df["rating"], ratings_df["rating"])),
-                                           shape=(uniq_user_ids.shape[0], uniq_movie_ids[0]))
-
-    moviesIds_userIds_ratings = csr_matrix((ratings_df["rating"],
-                                            (ratings_df["rating"], ratings_df["rating"])),
-                                           shape=(uniq_movie_ids.shape[0], uniq_user_ids.shape[0]))
-
-    return movies_rated_per_user_dict,ratings_given_by_user_per_movie_dict,userId_indexes, uniq_user_ids,\
-           movie_id_title_dict, userIds_moviesIds_ratings, moviesIds_userIds_ratings
+    return movies_rated_per_user_dict, ratings_given_by_user_per_movie_dict, list(userId_indexes), users, \
+           movie_id_title_dict, user_item, item_user
 
 
+movies_rated_per_user_dict, ratings_given_by_user_per_movie_dict, userId_indexes, uniq_user_ids, \
+movie_id_title_dict, user_item, item_user = preprocess_dataset()
 
-movies_rated_per_user_dict,ratings_given_by_user_per_movie_dict,userId_indexes, uniq_user_ids,\
-           movie_id_title_dict, userIds_moviesIds_ratings, moviesIds_userIds_ratings = preprocess_dataset()
 
 def read_user_input(user_id_list):
     while True:
@@ -85,49 +107,50 @@ def read_user_input(user_id_list):
 
 collaborative_filtering_input, user_id_input = read_user_input(uniq_user_ids)
 
-
 if collaborative_filtering_input == 0:
 
     active_user_ratings = ratings_given_by_user_per_movie_dict[user_id_input]
     active_user_rated_movies = movies_rated_per_user_dict[user_id_input]
 
+    list_of_chunks = list(chunks(userId_indexes, 100))
+    rating_of_all_movies_active_user = user_item[user_id_input, :].toarray()
 
-    for _, batch in batches.split(user_item, user_indices):
-        X_batch, indices_batch = user_item[batch], user_indices[batch]
+    for chunk in list(list_of_chunks):
 
-        # Compute user-user similarities
-        sim_users = cosine_similarity(user_movies, X_batch)
+        # user_item_chunks = list()
+        # for userId in chunk:
+        #     user_item_chunks.append(user_item[userId, :].toarray())
 
-        # Find and store indices of most similar users
-        closest_userIds = np.array(np.where(sim_users[0, :] >= min_similarity_users))
-        N = indices_batch[closest_userIds[0, :]]
-        N_final = np.concatenate((N_final, N), axis=0).astype(int)
-    #krata indexes kai similarities
-    N_unique = np.unique(N_final)
+        similar_users = cosine_similarity(rating_of_all_movies_active_user, user_item, chunk)
 
-    # Compute similarities between specified user and all similar users
-    Sxy =  cosine_similarity(user_movies, user_item[N_unique, :])
+        twenty_closest_userIds = get_n_elements_dict(20, True, similar_users)
+        # Compute predicted ratings for user
+        pred_ratings = (Sxy @ user_item[N_unique, :]) / (np.sum(Sxy, axis=1).reshape(-1, 1))
+        pred_top_n = np.vstack((-np.sort(-pred_ratings, axis=1)[0, :top_n_movies],
+                                np.argsort(-pred_ratings, axis=1)[0, :top_n_movies]))
 
-    # Compute predicted ratings for user
-    pred_ratings = (Sxy @ user_item[N_unique, :]) / (np.sum(Sxy, axis=1).reshape(-1, 1))
-    pred_top_n = np.vstack((-np.sort(-pred_ratings, axis=1)[0, :top_n_movies],
-                            np.argsort(-pred_ratings, axis=1)[0, :top_n_movies]))
+
 
     # Create a DataFrame which displays top-n movie recommendations
-    df = pd.DataFrame({'predicted_rating': pred_top_n[0, :], 'index': pred_top_n[1, :]})
-    df['movieId'] = df['index'].apply(lambda x: idx_to_movieId.get(x))
-    df['title'] = df['movieId'].apply(lambda x: titles_dict.get(x))
-    df_user = df.drop(['index', 'movieId'], axis=1)
+
 
 elif collaborative_filtering_input == 1:
 
     # prepei na vroume tis tainies pou exei dosei rating o user -> rated
     # movie-movie similarity pou exei kanei rate me oles tis ipolipes pou uparxoun sto batch
-    movie_indices = np.array(list(idx_to_movieId.keys()))
-    user_movies = item_user[:, user].toarray()
+
+    list_of_chunks = list(chunks(userId_indexes, 100))
+    movies_active_user = item_user[user_id_input, :].toarray()
+
+    rated = np.array(np.where(user_movies[:, 0] > 0))
+
+    for chunk in list(list_of_chunks):
+        movies_active_user_chunks = movies_active_user[chunk]
+
+
 
     # Store indices of movies ra00ed by user
-    rated = np.array(np.where(user_movies[:, 0] > 0))
+
     N_final = []
 
     for _, batch in batches.split(item_user, movie_indices):
@@ -153,7 +176,7 @@ elif collaborative_filtering_input == 1:
 
     # Compute similarities between rated movies of user and all similar movies
     Sij = cosine_similarity(item_user[rated[0, :], :],
-                                 item_user[N_unique, :])
+                            item_user[N_unique, :])
 
     # Compute predicted ratings for user
     pred_ratings = (Sij.T @ user_movies[rated, 0].T) / (np.sum(Sij.T, axis=1).reshape(-1, 1))
@@ -166,8 +189,6 @@ elif collaborative_filtering_input == 1:
     df['title'] = df['movieId'].apply(lambda x: titles_dict.get(x))
     df_item = df.drop(['index', 'movieId'], axis=1)
 
-
-
 print('\nDisk-based collaborative filtering using the {} variant finished '
       'in {:.2f} s.\nThe data  were broken up into {} batches. \n'
       'Below are the top-{} recommended movies and corresponding ratings for user {}.\n'
@@ -179,4 +200,3 @@ if task == 'hybrid':
     df = df.sort_values(by='predicted_rating', ascending=False)[0:top_n_movies]
     print(df)
     # return df
-
