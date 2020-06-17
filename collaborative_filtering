@@ -11,7 +11,7 @@ DATASET_PATH_RATINGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analys
 def cosine_similarity(vec1, vec2, indexes):
     similarity_indexes = dict()
     for userId in indexes:
-        ratings_per_userid = vec2[userId, :].ratings_for_movies_for_top_users()
+        ratings_per_userid = vec2[userId, :].toarray()
         similarity_indexes[userId] = 1 - spatial.distance.cosine(vec1, ratings_per_userid)
 
     return similarity_indexes
@@ -114,7 +114,7 @@ if collaborative_filtering_input == 0:
     active_user_rated_movies = movies_rated_per_user_dict[user_id_input]
 
     list_of_chunks = list(chunks(userId_indexes, 100))
-    rating_of_all_movies_active_user = user_item[user_id_input, :].ratings_for_movies_for_top_users()
+    rating_of_all_movies_active_user = user_item[user_id_input, :].toarray()
 
     for chunk in list(list_of_chunks):
 
@@ -125,16 +125,20 @@ if collaborative_filtering_input == 0:
         similar_users = cosine_similarity(rating_of_all_movies_active_user, user_item, chunk)
 
         twenty_closest_userIds = get_n_elements_dict(20, True, similar_users)
-        top_twenty_user_ids = twenty_closest_userIds.keys()
+        top_twenty_user_ids = list(twenty_closest_userIds.keys())
 
-        ratings_for_movies_for_top_users = user_item[top_twenty_user_ids, :].ratings_for_movies_for_top_users()
+        ratings_for_movies_for_top_users = dict()
+        for userId in top_twenty_user_ids:
+            ratings_for_movies_for_top_users[userId] = user_item[userId, :].toarray()
 
         sum_similarity_indexes = 0
         for _, value in similar_users.items():
             sum_similarity_indexes += value
 
         # multiply the similarity score with the ratings
-        weighted_rating_matrix = similar_users
+        weighted_rating_matrix = list()
+        for key, value in similar_users.items():
+            weighted_rating_matrix.append(user_item[key, :].toarray() * value)
 
         sum_weighted_ratings_per_movie
 
