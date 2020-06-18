@@ -1,4 +1,5 @@
 import numpy as np
+from more_itertools import take
 from scipy import spatial
 import pandas as pd
 from pandas.api.types import CategoricalDtype
@@ -31,6 +32,13 @@ def chunks(list_to_chunk, n):
     for i in range(0, len(list_to_chunk), n):
         yield list_to_chunk[i:i + n]
 
+
+def sort_dict(dict_to_sort):
+    sorted_dict = dict()
+    for k in sorted(dict_to_sort, key=dict_to_sort.get, reverse=True):
+        sorted_dict[k] = dict_to_sort[k]
+
+    return sorted_dict
 
 def get_n_elements_dict(n, reversed_list, dict_to_sort):
     dict_sort = dict()
@@ -121,7 +129,7 @@ if collaborative_filtering_input == 0:
     active_user_ratings = ratings_given_by_user_per_movie_dict[user_id_input]
     active_user_rated_movies = movies_rated_per_user_dict[user_id_input]
 
-    list_of_chunks = list(chunks(userId_indexes, 100))
+    list_of_chunks = list(chunks(user_indices, 100))
     rating_of_all_movies_active_user = user_item[user_id_input, :].toarray()
     all_movies_final_calculations = dict()
 
@@ -171,11 +179,12 @@ if collaborative_filtering_input == 0:
             if sum_weighted_ratings_per_movie[i] != 0:
                 all_movies_final_calculations[i] = sum_weighted_ratings_per_movie[i]
 
-    top_twenty_movies_indexes_similarity = get_n_elements_dict(20, True, all_movies_final_calculations)
+    top_twenty_movies_indexes_similarity = sort_dict(all_movies_final_calculations)
+    n_movies = take(20, top_twenty_movies_indexes_similarity.items())
 
-    for key, value in top_twenty_movies_indexes_similarity.items():
-        print("Top-20 movie recommendations for the proposed user are: \n")
-        print(movie_id_title_dict[key] + " with similarity: " + round(value, 2))
+    print("Top-20 movie recommendations for the proposed user are: \n")
+    for movie in n_movies:
+        print(str(movie_id_title_dict[movie[0]][0]) + " with similarity: " + str(movie[1]))
 
 
 elif collaborative_filtering_input == 1:
