@@ -4,6 +4,7 @@ from scipy import spatial
 import pandas as pd
 from pandas.api.types import CategoricalDtype
 from scipy.sparse import csr_matrix
+from collections import defaultdict
 
 DATASET_PATH_MOVIES_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/movies.csv"
 DATASET_PATH_RATINGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/ratings_temp.csv"
@@ -99,9 +100,6 @@ def preprocess_dataset():
     return list(userId_indexes), users, movie_id_title_dict, user_item, item_user, movies, index_to_userId, index_to_movieId
 
 
-userId_indexes, users, movie_id_title_dict, user_item, item_user, movies, index_to_userId, index_to_movieId = preprocess_dataset()
-
-
 def read_user_input(user_id_list):
     while True:
         try:
@@ -111,14 +109,11 @@ def read_user_input(user_id_list):
         except ValueError:
             print('Please enter a valid number')
 
-        if (collaborative_filtering_input in range(0, 2)) and (user_id_input in user_id_list):
+        if (collaborative_filtering_input in range(0, 3)) and (user_id_input in user_id_list):
             break
         else:
             print("Either the first choice is wrong or the user id does not exists, please try again")
     return collaborative_filtering_input, user_id_input
-
-
-collaborative_filtering_input, user_id_input = read_user_input(users)
 
 
 def user_based():
@@ -174,10 +169,6 @@ def user_based():
     top_twenty_movies_indexes_similarity = sort_dict(all_movies_final_calculations)
     n_movies = take(20, top_twenty_movies_indexes_similarity.items())
 
-    print("Top-20 movie recommendations for the proposed user are: \n")
-    for movie in n_movies:
-        print(str(movie_id_title_dict[movie[0]][0]) + " with similarity: " + str(movie[1]))
-
     return n_movies
 
 def item_based():
@@ -189,7 +180,6 @@ def item_based():
     movies_active_user = item_user[user_id_input, :].toarray()
 
     for chunk in list(list_of_chunks):
-        # movies_active_user_chunks = movies_active_user[chunk]
 
         similar_movies = cosine_similarity(movies_active_user, item_user, chunk)
 
@@ -236,23 +226,39 @@ def item_based():
     top_twenty_movies_indexes_similarity = sort_dict(all_movies_final_calculations)
     n_movies = take(20, top_twenty_movies_indexes_similarity.items())
 
-    print("Top-20 movie recommendations for the proposed user are: \n")
-    for movie in n_movies:
-        print(str(movie_id_title_dict[index_to_movieId[n_movies[0][0]]]) + " with similarity: " + str(movie[1]))
-
     return n_movies
 
+userId_indexes, users, movie_id_title_dict, user_item, item_user, movies, index_to_userId, index_to_movieId = preprocess_dataset()
+collaborative_filtering_input, user_id_input = read_user_input(users)
 
 if collaborative_filtering_input == 0:
-    user_based()
+    n_movies = user_based()
+
+    print("Top-20 movie recommendations for the proposed user are: \n")
+    for movie in n_movies:
+        print(str(movie_id_title_dict[movie[0]][0]) + " with similarity: " + str(movie[1]))
 
 elif collaborative_filtering_input == 1:
-    item_based()
+
+    n_movies = item_based()
+    print("Top-20 movie recommendations for the proposed user are: \n")
+    for movie in n_movies:
+        print(str(movie_id_title_dict[index_to_movieId[movie[0]]][0]) + " with similarity: " + str(movie[1]))
 
 elif collaborative_filtering_input == 2:
     n_user_based_movies = user_based()
     n_item_based_movies = item_based()
     concatenated_results = n_user_based_movies + n_item_based_movies
+    final_movie_results = defaultdict()
+    for result in concatenated_results:
+        final_movie_results[result[0]] = result[1]
+
+    n_movies = sort_dict(final_movie_results)
+    n_movies = take(20, n_movies.items())
+
+    print("Top-20 movie recommendations for the proposed user are: \n")
+    for movie in n_movies:
+        print(str(movie_id_title_dict[index_to_movieId[movie[0]]][0]) + " with similarity: " + str(movie[1]))
 
 else:
     print("Try run the program again with correct values")

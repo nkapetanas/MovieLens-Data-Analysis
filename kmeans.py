@@ -50,44 +50,37 @@ class KMeans:
         self.plot_steps = plot_steps
         self.distance_function = distance_function
 
-        # initialize clusters with empty list of sample indices for each cluster
         self.clusters = [[] for _ in range(self.K)]
 
-        # the centers (mean feature vector) for each cluster
         self.centroids = []
 
     def predict(self, movies):
         self.number_of_records, self.features = movies.shape
 
-        # initialize
         random_indexes = np.random.choice(self.number_of_records, self.K, replace=False)
         self.centroids = [movies[idx] for idx in random_indexes]
 
-        # Optimize clusters
         for _ in range(self.max_iterations):
 
-            # Assign samples to closest centroids (create clusters)
             self.clusters = self.create_clusters(self.centroids, movies)
 
             if self.plot_steps:
                 self.plot(movies)
 
-            # Calculate new centroids from the clusters
             centroids_old = self.centroids
             self.centroids = self.get_centroids(self.clusters, movies)
 
-            # check if clusters have changed
             if self.converges(centroids_old, self.centroids).all():
                 break
 
             if self.plot_steps:
                 self.plot(movies)
 
-        # Classify samples as the index of their clusters
-        return self._get_cluster_labels(self.clusters)
 
-    def _get_cluster_labels(self, clusters):
-        # each sample will get the label of the cluster it was assigned to
+        return self.get_labels_of_clusters(self.clusters)
+
+    def get_labels_of_clusters(self, clusters):
+
         labels = np.empty(self.number_of_records)
 
         for cluster_idx, cluster in enumerate(clusters):
@@ -95,19 +88,8 @@ class KMeans:
                 labels[sample_index] = cluster_idx
         return labels
 
-    def chunk(self, seq, num):
-        avg = len(seq) / float(num)
-        out = list()
-        last = 0.0
-
-        while last < len(seq):
-            out.append(seq[int(last):int(last + avg)])
-            last += avg
-
-        return out
-
     def create_clusters(self, centroids, movies):
-        # Assign the samples to the closest centroids to create clusters
+
         clusters = list()
         for _ in range(self.K):
             clusters.append(list())
@@ -127,7 +109,7 @@ class KMeans:
         return closest_index
 
     def get_centroids(self, clusters, movies):
-        # assign mean value of clusters to centroids
+
         centroids = np.zeros((self.K, self.features))
         for cluster_index, cluster in enumerate(clusters):
             cluster_mean = np.mean(movies[cluster], axis=0)
@@ -135,7 +117,7 @@ class KMeans:
         return centroids
 
     def converges(self, centroids_old, centroids):
-        # distances between each old and new centroids, fol all centroids
+
         distances = list()
         for i in range(self.K):
             distances.append(self.distance_function(centroids_old[i], centroids[i]))
@@ -171,16 +153,6 @@ def get_movies_with_tags(df):
     return df.iloc[:, [0, 13]]
 
 
-def countplot_clusters(movies_member, task):
-    X = movies_member[:, 1]
-    sns.countplot(X)
-    plt.xticks(np.arange(5), np.arange(5).astype(int))
-    plt.xlabel('Cluster')
-    plt.ylabel('Number of Movies')
-    plt.title('Countplot of Cluster Memberships using distance {}'.format(task))
-    # plt.savefig('countplot_{}.png'.format(task))
-    plt.show()
-
 predictions_list = list()
 for chunk in pd.read_csv(DATASET_PATH_PREPROCESSED_CSV, chunksize=1000):
 
@@ -194,4 +166,4 @@ for chunk in pd.read_csv(DATASET_PATH_PREPROCESSED_CSV, chunksize=1000):
     predictions_list.append(y_pred)
 
 flat_list = [item for sublist in predictions_list for item in sublist]
-countplot_clusters(flat_list, "Ratings")
+
