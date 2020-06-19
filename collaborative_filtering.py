@@ -1,10 +1,11 @@
-import numpy as np
-from more_itertools import take
-from scipy import spatial
-import pandas as pd
-from pandas.api.types import CategoricalDtype
-from scipy.sparse import csr_matrix
 from collections import defaultdict
+
+import numpy as np
+import pandas as pd
+from more_itertools import take
+from pandas.api.types import CategoricalDtype
+from scipy import spatial
+from scipy.sparse import csr_matrix
 
 DATASET_PATH_MOVIES_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/movies.csv"
 DATASET_PATH_RATINGS_CSV = "C:/Users/Delta/PycharmProjects/MovieLens-Data-Analysis/data/ratings_temp.csv"
@@ -97,7 +98,8 @@ def preprocess_dataset():
 
     ratings_df.groupby("userId").agg({"movieId": lambda x: list(x), "rating": lambda x: list(x)})
 
-    return list(userId_indexes), users, movie_id_title_dict, user_item, item_user, movies, index_to_userId, index_to_movieId
+    return list(
+        userId_indexes), users, movie_id_title_dict, user_item, item_user, movies, index_to_userId, index_to_movieId
 
 
 def read_user_input(user_id_list):
@@ -117,7 +119,6 @@ def read_user_input(user_id_list):
 
 
 def user_based():
-
     user_indices = np.array(list(index_to_userId.keys()))
     list_of_chunks = list(chunks(user_indices, 100))
 
@@ -171,8 +172,8 @@ def user_based():
 
     return n_movies
 
-def item_based():
 
+def item_based():
     movie_indexes = np.array(list(index_to_movieId.keys()))
     all_movies_final_calculations = dict()
 
@@ -228,6 +229,7 @@ def item_based():
 
     return n_movies
 
+
 userId_indexes, users, movie_id_title_dict, user_item, item_user, movies, index_to_userId, index_to_movieId = preprocess_dataset()
 collaborative_filtering_input, user_id_input = read_user_input(users)
 
@@ -262,5 +264,3 @@ elif collaborative_filtering_input == 2:
 
 else:
     print("Try run the program again with correct values")
-
-
